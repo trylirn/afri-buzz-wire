@@ -77,14 +77,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Africa Pulse — Real news across Africa" },
+      { name: "description", content: "The biggest and most up-to-date news from across Africa: politics, business, sport, culture, tech. Real stories, updated hourly." },
+      { property: "og:site_name", content: "Africa Pulse" },
+      { property: "og:title", content: "Africa Pulse — Real news across Africa" },
+      { property: "og:description", content: "The biggest and most up-to-date news from across Africa." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
