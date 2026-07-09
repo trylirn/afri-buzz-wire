@@ -81,9 +81,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "The biggest and most up-to-date news from across Africa: politics, business, sport, culture, tech. Real stories, updated hourly." },
       { property: "og:site_name", content: "Africa Pulse" },
       { property: "og:title", content: "Africa Pulse — Real news across Africa" },
-      { property: "og:description", content: "The biggest and most up-to-date news from across Africa." },
+      { property: "og:description", content: "The biggest and most up-to-date news from across Africa: politics, business, sport, culture, tech. Real stories, updated hourly." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Africa Pulse — Real news across Africa" },
+      { name: "twitter:description", content: "The biggest and most up-to-date news from across Africa: politics, business, sport, culture, tech. Real stories, updated hourly." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/eef81645-3d3d-4a11-84a4-1bd6ce23bfea/id-preview-55b7516a--e970caf1-9785-4e2c-98e7-e2633586591c.lovable.app-1783609026226.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/eef81645-3d3d-4a11-84a4-1bd6ce23bfea/id-preview-55b7516a--e970caf1-9785-4e2c-98e7-e2633586591c.lovable.app-1783609026226.png" },
     ],
     links: [
       {
