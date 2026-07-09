@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { getHomeNews } from "@/lib/news.functions";
+import { getHomeNews, type Article } from "@/lib/news.functions";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
 import { Link } from "@tanstack/react-router";
@@ -81,7 +81,7 @@ function CategorySection({
 }: {
   title: string;
   slug: string;
-  articles: ReturnType<typeof useSuspenseQuery<typeof homeQuery>>["data"]["top"];
+  articles: Article[];
 }) {
   if (articles.length === 0) return null;
   return (
