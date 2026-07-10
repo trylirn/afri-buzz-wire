@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import type { Article } from "@/lib/news.functions";
+import { TweetActions } from "@/components/TweetActions";
 
 function timeAgo(iso: string): string {
   const t = Date.parse(iso);
@@ -14,19 +16,27 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
+function TimeAgo({ iso }: { iso: string }) {
+  // Render nothing on server to avoid hydration mismatch, then compute on client.
+  const [label, setLabel] = useState<string>("");
+  useEffect(() => {
+    setLabel(timeAgo(iso));
+    const id = setInterval(() => setLabel(timeAgo(iso)), 60000);
+    return () => clearInterval(id);
+  }, [iso]);
+  if (!label) return null;
+  return <span className="text-muted-foreground">{label}</span>;
+}
+
 export function ArticleCard({ article, size = "md" }: { article: Article; size?: "sm" | "md" | "lg" }) {
   const isLarge = size === "lg";
   const isSmall = size === "sm";
 
   return (
-    <Link
-      to="/article/$id"
-      params={{ id: article.id }}
-      className="group block"
-    >
-      <article className="flex h-full flex-col overflow-hidden rounded-sm border border-border bg-card transition-shadow hover:shadow-lg">
+    <article className="group flex h-full flex-col overflow-hidden rounded-sm border border-border bg-card transition-shadow hover:shadow-lg">
+      <Link to="/article/$id" params={{ id: article.id }} className="block">
         {article.image ? (
-          <div className={`overflow-hidden bg-muted ${isLarge ? "aspect-[16/9]" : isSmall ? "aspect-[16/10]" : "aspect-[16/10]"}`}>
+          <div className={`overflow-hidden bg-muted ${isLarge ? "aspect-[16/9]" : "aspect-[16/10]"}`}>
             <img
               src={article.image}
               alt=""
@@ -44,7 +54,7 @@ export function ArticleCard({ article, size = "md" }: { article: Article; size?:
             {article.publishedAt && (
               <>
                 <span className="text-border">•</span>
-                <span className="text-muted-foreground">{timeAgo(article.publishedAt)}</span>
+                <TimeAgo iso={article.publishedAt} />
               </>
             )}
           </div>
@@ -61,7 +71,10 @@ export function ArticleCard({ article, size = "md" }: { article: Article; size?:
             </p>
           )}
         </div>
-      </article>
-    </Link>
+      </Link>
+      <div className="border-t border-border bg-background/60 px-3 py-2">
+        <TweetActions article={article} variant="compact" />
+      </div>
+    </article>
   );
 }
