@@ -104,6 +104,11 @@ function ArticlePage() {
           </div>
         )}
 
+        <div className="mt-8">
+          <TweetActions article={a} variant="full" />
+        </div>
+
+
         <div className="mt-8 rounded-sm border border-border bg-card p-6">
           <p className="text-sm text-muted-foreground">
             This is a preview from <strong className="text-foreground">{a.source}</strong>. Read the full story
