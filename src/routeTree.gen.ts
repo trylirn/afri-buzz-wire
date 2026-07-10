@@ -9,14 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RegionRouteImport } from './routes/$region'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RegionIndexRouteImport } from './routes/$region.index'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as ArticleIdRouteImport } from './routes/article.$id'
+import { Route as RegionCategoryRouteImport } from './routes/$region.$category'
 
+const RegionRoute = RegionRouteImport.update({
+  id: '/$region',
+  path: '/$region',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const RegionIndexRoute = RegionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RegionRoute,
 } as any)
 const CategorySlugRoute = CategorySlugRouteImport.update({
   id: '/category/$slug',
@@ -28,45 +41,91 @@ const ArticleIdRoute = ArticleIdRouteImport.update({
   path: '/article/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegionCategoryRoute = RegionCategoryRouteImport.update({
+  id: '/$category',
+  path: '/$category',
+  getParentRoute: () => RegionRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$region': typeof RegionRouteWithChildren
+  '/$region/$category': typeof RegionCategoryRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
+  '/$region/': typeof RegionIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$region/$category': typeof RegionCategoryRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
+  '/$region': typeof RegionIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$region': typeof RegionRouteWithChildren
+  '/$region/$category': typeof RegionCategoryRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
+  '/$region/': typeof RegionIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/article/$id' | '/category/$slug'
+  fullPaths:
+    | '/'
+    | '/$region'
+    | '/$region/$category'
+    | '/article/$id'
+    | '/category/$slug'
+    | '/$region/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/article/$id' | '/category/$slug'
-  id: '__root__' | '/' | '/article/$id' | '/category/$slug'
+  to:
+    | '/'
+    | '/$region/$category'
+    | '/article/$id'
+    | '/category/$slug'
+    | '/$region'
+  id:
+    | '__root__'
+    | '/'
+    | '/$region'
+    | '/$region/$category'
+    | '/article/$id'
+    | '/category/$slug'
+    | '/$region/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RegionRoute: typeof RegionRouteWithChildren
   ArticleIdRoute: typeof ArticleIdRoute
   CategorySlugRoute: typeof CategorySlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/$region': {
+      id: '/$region'
+      path: '/$region'
+      fullPath: '/$region'
+      preLoaderRoute: typeof RegionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/$region/': {
+      id: '/$region/'
+      path: '/'
+      fullPath: '/$region/'
+      preLoaderRoute: typeof RegionIndexRouteImport
+      parentRoute: typeof RegionRoute
     }
     '/category/$slug': {
       id: '/category/$slug'
@@ -82,14 +141,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArticleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$region/$category': {
+      id: '/$region/$category'
+      path: '/$category'
+      fullPath: '/$region/$category'
+      preLoaderRoute: typeof RegionCategoryRouteImport
+      parentRoute: typeof RegionRoute
+    }
   }
 }
 
+interface RegionRouteChildren {
+  RegionCategoryRoute: typeof RegionCategoryRoute
+  RegionIndexRoute: typeof RegionIndexRoute
+}
+
+const RegionRouteChildren: RegionRouteChildren = {
+  RegionCategoryRoute: RegionCategoryRoute,
+  RegionIndexRoute: RegionIndexRoute,
+}
+
+const RegionRouteWithChildren =
+  RegionRoute._addFileChildren(RegionRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RegionRoute: RegionRouteWithChildren,
   ArticleIdRoute: ArticleIdRoute,
   CategorySlugRoute: CategorySlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

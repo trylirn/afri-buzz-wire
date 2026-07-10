@@ -10,7 +10,10 @@ export type Article = {
   publishedAt: string;
   image: string | null;
   category: string;
+  region: Region;
 };
+
+export type Region = "africa" | "nigeria";
 
 export type CategorySlug =
   | "politics-business"
@@ -21,7 +24,7 @@ export type CategorySlug =
 
 type Feed = { url: string; source: string };
 
-const FEEDS: Record<CategorySlug, Feed[]> = {
+const AFRICA_FEEDS: Record<CategorySlug, Feed[]> = {
   top: [
     { url: "https://feeds.bbci.co.uk/news/world/africa/rss.xml", source: "BBC Africa" },
     { url: "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf", source: "AllAfrica" },
@@ -45,14 +48,56 @@ const FEEDS: Record<CategorySlug, Feed[]> = {
   ],
 };
 
+const NIGERIA_FEEDS: Record<CategorySlug, Feed[]> = {
+  top: [
+    { url: "https://www.premiumtimesng.com/feed", source: "Premium Times" },
+    { url: "https://punchng.com/feed/", source: "Punch" },
+    { url: "https://www.channelstv.com/feed/", source: "Channels TV" },
+    { url: "https://www.vanguardngr.com/feed/", source: "Vanguard" },
+    { url: "https://guardian.ng/feed/", source: "The Guardian NG" },
+    { url: "https://allafrica.com/tools/headlines/rdf/nigeria/headlines.rdf", source: "AllAfrica Nigeria" },
+  ],
+  "politics-business": [
+    { url: "https://www.premiumtimesng.com/category/news/top-news/feed", source: "Premium Times Politics" },
+    { url: "https://punchng.com/topics/politics/feed/", source: "Punch Politics" },
+    { url: "https://www.vanguardngr.com/category/business/feed/", source: "Vanguard Business" },
+    { url: "https://guardian.ng/category/business-services/feed/", source: "Guardian NG Business" },
+  ],
+  sports: [
+    { url: "https://www.premiumtimesng.com/category/sports/feed", source: "Premium Times Sports" },
+    { url: "https://punchng.com/sports/feed/", source: "Punch Sports" },
+    { url: "https://www.vanguardngr.com/category/sports/feed/", source: "Vanguard Sports" },
+    { url: "https://guardian.ng/category/sport/feed/", source: "Guardian NG Sport" },
+  ],
+  entertainment: [
+    { url: "https://www.premiumtimesng.com/category/entertainment/feed", source: "Premium Times Entertainment" },
+    { url: "https://punchng.com/topics/entertainment/feed/", source: "Punch Entertainment" },
+    { url: "https://guardian.ng/category/life/feed/", source: "Guardian NG Life" },
+  ],
+  tech: [
+    { url: "https://guardian.ng/category/technology/feed/", source: "Guardian NG Tech" },
+    { url: "https://www.premiumtimesng.com/category/news/tech/feed", source: "Premium Times Tech" },
+    { url: "https://punchng.com/topics/technology/feed/", source: "Punch Tech" },
+  ],
+};
+
+const FEEDS: Record<Region, Record<CategorySlug, Feed[]>> = {
+  africa: AFRICA_FEEDS,
+  nigeria: NIGERIA_FEEDS,
+};
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   textNodeName: "#text",
 });
 
-function toId(link: string): string {
-  return btoa(link).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+function toId(region: Region, link: string): string {
+  const b = btoa(unescape(encodeURIComponent(link)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `${region}_${b}`;
 }
 
 function stripHtml(input: string): string {
@@ -81,11 +126,12 @@ function extractImage(item: Record<string, unknown>, description: string): strin
   if (enclosure?.["@_url"] && (enclosure["@_type"] ?? "").startsWith("image")) {
     return enclosure["@_url"];
   }
-  const match = description.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const content = (item["content:encoded"] ?? "") as string;
+  const match = (description + " " + content).match(/<img[^>]+src=["']([^"']+)["']/i);
   return match ? match[1] : null;
 }
 
-async function fetchFeed(feed: Feed, category: string): Promise<Article[]> {
+async function fetchFeed(feed: Feed, category: string, region: Region): Promise<Article[]> {
   try {
     const res = await fetch(feed.url, {
       headers: { "User-Agent": "Mozilla/5.0 (AfricaPulse RSS)" },
@@ -95,7 +141,6 @@ async function fetchFeed(feed: Feed, category: string): Promise<Article[]> {
     const xml = await res.text();
     const parsed = parser.parse(xml);
 
-    // RSS 2.0: rss.channel.item; RDF: rdf:RDF.item
     let items: Record<string, unknown>[] = [];
     if (parsed?.rss?.channel?.item) {
       items = Array.isArray(parsed.rss.channel.item)
@@ -121,13 +166,13 @@ async function fetchFeed(feed: Feed, category: string): Promise<Article[]> {
 
         const descRaw = (item.description ?? item.summary ?? "") as string | { "#text"?: string };
         const descriptionHtml = typeof descRaw === "string" ? descRaw : descRaw?.["#text"] ?? "";
-        const description = stripHtml(descriptionHtml).slice(0, 320);
+        const description = stripHtml(descriptionHtml).slice(0, 400);
 
         const pubDate = (item.pubDate ?? item["dc:date"] ?? item.published ?? "") as string;
 
         if (!title || !link) return null;
         return {
-          id: toId(link),
+          id: toId(region, link),
           title: stripHtml(title),
           description,
           link,
@@ -135,6 +180,7 @@ async function fetchFeed(feed: Feed, category: string): Promise<Article[]> {
           publishedAt: pubDate,
           image: extractImage(item, descriptionHtml),
           category,
+          region,
         };
       })
       .filter((a): a is Article => a !== null);
@@ -144,17 +190,15 @@ async function fetchFeed(feed: Feed, category: string): Promise<Article[]> {
   }
 }
 
-async function fetchCategory(slug: CategorySlug): Promise<Article[]> {
-  const feeds = FEEDS[slug];
-  const results = await Promise.all(feeds.map((f) => fetchFeed(f, slug)));
+async function fetchCategory(region: Region, slug: CategorySlug): Promise<Article[]> {
+  const feeds = FEEDS[region][slug];
+  const results = await Promise.all(feeds.map((f) => fetchFeed(f, slug, region)));
   const merged = results.flat();
-  // sort newest first
   merged.sort((a, b) => {
     const ta = Date.parse(a.publishedAt) || 0;
     const tb = Date.parse(b.publishedAt) || 0;
     return tb - ta;
   });
-  // dedupe by title
   const seen = new Set<string>();
   return merged.filter((a) => {
     const key = a.title.toLowerCase();
@@ -165,35 +209,48 @@ async function fetchCategory(slug: CategorySlug): Promise<Article[]> {
 }
 
 export const getCategoryNews = createServerFn({ method: "GET" })
-  .inputValidator((data: { slug: CategorySlug }) => data)
+  .inputValidator((data: { region: Region; slug: CategorySlug }) => data)
   .handler(async ({ data }) => {
-    const articles = await fetchCategory(data.slug);
+    const articles = await fetchCategory(data.region, data.slug);
     return { articles: articles.slice(0, 30) };
   });
 
+export const getRegionHome = createServerFn({ method: "GET" })
+  .inputValidator((data: { region: Region }) => data)
+  .handler(async ({ data }) => {
+    const [top, politics, sports, entertainment, tech] = await Promise.all([
+      fetchCategory(data.region, "top"),
+      fetchCategory(data.region, "politics-business"),
+      fetchCategory(data.region, "sports"),
+      fetchCategory(data.region, "entertainment"),
+      fetchCategory(data.region, "tech"),
+    ]);
+    return {
+      top: top.slice(0, 12),
+      politicsBusiness: politics.slice(0, 6),
+      sports: sports.slice(0, 6),
+      entertainment: entertainment.slice(0, 6),
+      tech: tech.slice(0, 6),
+    };
+  });
+
 export const getHomeNews = createServerFn({ method: "GET" }).handler(async () => {
-  const [top, politics, sports, entertainment, tech] = await Promise.all([
-    fetchCategory("top"),
-    fetchCategory("politics-business"),
-    fetchCategory("sports"),
-    fetchCategory("entertainment"),
-    fetchCategory("tech"),
-  ]);
+  const regions: Region[] = ["africa", "nigeria"];
+  const [africaTop, nigeriaTop] = await Promise.all(
+    regions.map((r) => fetchCategory(r, "top")),
+  );
   return {
-    top: top.slice(0, 12),
-    politicsBusiness: politics.slice(0, 6),
-    sports: sports.slice(0, 6),
-    entertainment: entertainment.slice(0, 6),
-    tech: tech.slice(0, 6),
+    africa: { top: africaTop.slice(0, 10) },
+    nigeria: { top: nigeriaTop.slice(0, 10) },
   };
 });
 
 export const getArticle = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    const all = await Promise.all(
-      (Object.keys(FEEDS) as CategorySlug[]).map((s) => fetchCategory(s)),
-    );
+    const region: Region = data.id.startsWith("nigeria_") ? "nigeria" : "africa";
+    const slugs: CategorySlug[] = ["top", "politics-business", "sports", "entertainment", "tech"];
+    const all = await Promise.all(slugs.map((s) => fetchCategory(region, s)));
     const found = all.flat().find((a) => a.id === data.id);
     return { article: found ?? null };
   });

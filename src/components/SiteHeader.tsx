@@ -1,12 +1,32 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import type { Region } from "@/lib/news.functions";
 
-const NAV = [
-  { to: "/", label: "Home" },
-  { to: "/category/$slug", params: { slug: "politics-business" }, label: "Politics & Business" },
-  { to: "/category/$slug", params: { slug: "sports" }, label: "Sports" },
-  { to: "/category/$slug", params: { slug: "entertainment" }, label: "Entertainment" },
-  { to: "/category/$slug", params: { slug: "tech" }, label: "Tech & Science" },
-] as const;
+const CATS: { slug: string; label: string }[] = [
+  { slug: "politics-business", label: "Politics & Business" },
+  { slug: "sports", label: "Sports" },
+  { slug: "entertainment", label: "Entertainment" },
+  { slug: "tech", label: "Tech & Science" },
+];
+
+const REGIONS: { region: Region; label: string }[] = [
+  { region: "africa", label: "Africa Pulse" },
+  { region: "nigeria", label: "Latest in Nigeria" },
+];
+
+function DateLabel() {
+  const [d, setD] = useState<string>("");
+  useEffect(() => {
+    setD(
+      new Date().toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }),
+    );
+  }, []);
+  return <span>{d}</span>;
+}
 
 export function SiteHeader() {
   return (
@@ -18,30 +38,38 @@ export function SiteHeader() {
               Africa Pulse
             </span>
             <span className="hidden text-xs uppercase tracking-widest text-accent sm:inline">
-              Real news, real Africa
+              Africa & Nigeria news wire
             </span>
           </Link>
           <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            {new Date().toLocaleDateString("en-GB", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
+            <DateLabel />
           </div>
         </div>
-        <nav className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-3 text-sm font-medium">
-          {NAV.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              // @ts-expect-error - params only on some links
-              params={item.params}
-              className="text-muted-foreground transition-colors hover:text-accent"
-              activeProps={{ className: "text-accent" }}
-              activeOptions={{ exact: item.to === "/" }}
-            >
-              {item.label}
-            </Link>
+
+        <nav className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
+          {REGIONS.map(({ region, label }) => (
+            <div key={region} className="flex flex-wrap items-center gap-x-5 gap-y-1">
+              <Link
+                to="/$region"
+                params={{ region }}
+                className="font-serif text-base font-bold text-foreground hover:text-accent"
+                activeProps={{ className: "text-accent" }}
+              >
+                {label}
+              </Link>
+              <span className="text-border">|</span>
+              {CATS.map((c) => (
+                <Link
+                  key={c.slug}
+                  to="/$region/$category"
+                  params={{ region, category: c.slug }}
+                  className="text-muted-foreground transition-colors hover:text-accent"
+                  activeProps={{ className: "text-accent" }}
+                >
+                  {c.label}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
       </div>
@@ -50,15 +78,18 @@ export function SiteHeader() {
 }
 
 export function SiteFooter() {
+  const [year, setYear] = useState<number | null>(null);
+  useEffect(() => setYear(new Date().getFullYear()), []);
   return (
     <footer className="mt-16 border-t border-border bg-background">
       <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground">
         <p className="font-serif text-lg text-foreground">Africa Pulse</p>
         <p className="mt-1">
-          News aggregated from public RSS feeds: BBC Africa, AllAfrica. All articles link to their
-          original sources.
+          Africa & Nigeria news wire — headlines aggregated from public RSS feeds (BBC Africa,
+          AllAfrica, Premium Times, Punch, Channels TV, Vanguard, The Guardian NG). Every story
+          links back to its original source.
         </p>
-        <p className="mt-4 text-xs">© {new Date().getFullYear()} Africa Pulse.</p>
+        <p className="mt-4 text-xs">© {year ?? ""} Africa Pulse.</p>
       </div>
     </footer>
   );

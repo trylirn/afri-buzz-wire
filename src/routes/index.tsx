@@ -1,14 +1,14 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { getHomeNews, type Article } from "@/lib/news.functions";
+import { getHomeNews, type Article, type Region } from "@/lib/news.functions";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
-import { Link } from "@tanstack/react-router";
 
 const homeQuery = queryOptions({
   queryKey: ["home-news"],
   queryFn: () => getHomeNews(),
-  staleTime: 5 * 60 * 1000,
+  staleTime: 15 * 60 * 1000,
+  refetchInterval: 15 * 60 * 1000,
 });
 
 export const Route = createFileRoute("/")({
@@ -38,68 +38,49 @@ function HomeError({ reset }: { error: Error; reset: () => void }) {
 
 function Home() {
   const { data } = useSuspenseQuery(homeQuery);
-  const [hero, ...rest] = data.top;
 
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        {hero && (
-          <section className="mb-12">
-            <div className="mb-4 flex items-baseline justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-accent">Top Story</h2>
-            </div>
-            <ArticleCard article={hero} size="lg" />
-          </section>
-        )}
+        <section className="mb-10 rounded-sm border border-border bg-card p-6 md:p-8">
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Africa & Nigeria news wire</p>
+          <h1 className="mt-2 font-serif text-3xl font-bold leading-tight md:text-4xl">
+            Real, timely news — ready to post as a tweet in one click.
+          </h1>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Two live desks: pan-African headlines and dedicated Nigeria coverage. Every story has
+            a one-tap "Copy tweet" and "Copy source" so you can publish a clean X thread instantly.
+            Feeds refresh every 15 minutes.
+          </p>
+        </section>
 
-        {rest.length > 0 && (
-          <section className="mb-12">
-            <h2 className="mb-4 border-b border-border pb-2 font-serif text-2xl font-bold">Latest Across Africa</h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {rest.slice(0, 9).map((a) => (
-                <ArticleCard key={a.id} article={a} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <CategorySection title="Politics & Business" slug="politics-business" articles={data.politicsBusiness} />
-        <CategorySection title="Sports" slug="sports" articles={data.sports} />
-        <CategorySection title="Entertainment & Culture" slug="entertainment" articles={data.entertainment} />
-        <CategorySection title="Tech & Science" slug="tech" articles={data.tech} />
+        <RegionBlock region="africa" title="Africa Pulse" articles={data.africa.top} />
+        <RegionBlock region="nigeria" title="Latest in Nigeria" articles={data.nigeria.top} />
       </main>
       <SiteFooter />
     </div>
   );
 }
 
-function CategorySection({
-  title,
-  slug,
-  articles,
-}: {
-  title: string;
-  slug: string;
-  articles: Article[];
-}) {
-  if (articles.length === 0) return null;
+function RegionBlock({ region, title, articles }: { region: Region; title: string; articles: Article[] }) {
+  if (!articles.length) return null;
+  const [hero, ...rest] = articles;
   return (
-    <section className="mb-12">
+    <section className="mb-14">
       <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-        <h2 className="font-serif text-2xl font-bold">{title}</h2>
+        <h2 className="font-serif text-3xl font-bold">{title}</h2>
         <Link
-          to="/category/$slug"
-          params={{ slug }}
+          to="/$region"
+          params={{ region }}
           className="text-xs font-semibold uppercase tracking-widest text-accent hover:underline"
         >
-          More →
+          See all →
         </Link>
       </div>
+      {hero && <div className="mb-6"><ArticleCard article={hero} size="lg" /></div>}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {articles.slice(0, 3).map((a) => (
-          <ArticleCard key={a.id} article={a} />
-        ))}
+        {rest.slice(0, 6).map((a) => <ArticleCard key={a.id} article={a} />)}
       </div>
     </section>
   );
