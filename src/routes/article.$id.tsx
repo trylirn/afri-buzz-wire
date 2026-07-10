@@ -2,12 +2,13 @@ import { createFileRoute, Link, useRouter, notFound } from "@tanstack/react-rout
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getArticle } from "@/lib/news.functions";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
+import { TweetActions } from "@/components/TweetActions";
 
 const articleQuery = (id: string) =>
   queryOptions({
     queryKey: ["article", id],
     queryFn: () => getArticle({ data: { id } }),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
   });
 
 export const Route = createFileRoute("/article/$id")({
