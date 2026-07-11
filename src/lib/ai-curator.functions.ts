@@ -127,11 +127,19 @@ Return one result object per input article, in the same order, keyed by the inpu
       });
 
       const results = object.results as CurationResult[];
+
+      // Match results back to articles by POSITION, not by id. The prompt
+      // asks the model to return one result per article "in the same
+      // order" — models follow that far more reliably than they reproduce
+      // our long, opaque base64 ids character-for-character. If the model
+      // ever returns a different count than we sent, fall back to id
+      // matching for that batch instead of guessing.
       const byId = new Map(results.map((r) => [r.id, r]));
+      const sameLength = results.length === uncached.length;
 
       const freshlyEnriched: (Article & { virality: number })[] = uncached
-        .map((a) => {
-          const r = byId.get(a.id);
+        .map((a, i) => {
+          const r = sameLength ? results[i] : byId.get(a.id);
           if (!r) return null;
           if (!r.keep || !r.region_relevant) return null;
           if (r.virality < 6) return null;
@@ -142,6 +150,16 @@ Return one result object per input article, in the same order, keyed by the inpu
           } as Article & { virality: number };
         })
         .filter((x): x is Article & { virality: number } => x !== null);
+
+      // Safety net: if the AI kept literally none of a real batch, that's
+      // far more likely a matching hiccup than every single story being
+      // genuinely bad. Show the raw articles instead of an empty page.
+      if (!freshlyEnriched.length && uncached.length) {
+        console.error(
+          `AI curator kept 0 of ${uncached.length} articles for ${region}/${topic} — showing raw fallback`,
+        );
+        return { articles: [...cachedResults, ...uncached] };
+      }
 
       // Cache every newly curated article permanently, keyed by its own id,
       // so it's never sent back to the AI or rewritten again.
