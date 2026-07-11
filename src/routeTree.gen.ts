@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as RegionIndexRouteImport } from './routes/$region.index'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as ArticleIdRouteImport } from './routes/article.$id'
+import { Route as ApiImgRouteImport } from './routes/api/img'
 import { Route as RegionCategoryRouteImport } from './routes/$region.$category'
 
 const RegionRoute = RegionRouteImport.update({
@@ -41,6 +42,11 @@ const ArticleIdRoute = ArticleIdRouteImport.update({
   path: '/article/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiImgRoute = ApiImgRouteImport.update({
+  id: '/api/img',
+  path: '/api/img',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegionCategoryRoute = RegionCategoryRouteImport.update({
   id: '/$category',
   path: '/$category',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$region': typeof RegionRouteWithChildren
   '/$region/$category': typeof RegionCategoryRoute
+  '/api/img': typeof ApiImgRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/$region/': typeof RegionIndexRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$region/$category': typeof RegionCategoryRoute
+  '/api/img': typeof ApiImgRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/$region': typeof RegionIndexRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$region': typeof RegionRouteWithChildren
   '/$region/$category': typeof RegionCategoryRoute
+  '/api/img': typeof ApiImgRoute
   '/article/$id': typeof ArticleIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/$region/': typeof RegionIndexRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$region'
     | '/$region/$category'
+    | '/api/img'
     | '/article/$id'
     | '/category/$slug'
     | '/$region/'
@@ -84,6 +94,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$region/$category'
+    | '/api/img'
     | '/article/$id'
     | '/category/$slug'
     | '/$region'
@@ -92,6 +103,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$region'
     | '/$region/$category'
+    | '/api/img'
     | '/article/$id'
     | '/category/$slug'
     | '/$region/'
@@ -100,6 +112,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   RegionRoute: typeof RegionRouteWithChildren
+  ApiImgRoute: typeof ApiImgRoute
   ArticleIdRoute: typeof ArticleIdRoute
   CategorySlugRoute: typeof CategorySlugRoute
 }
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArticleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/img': {
+      id: '/api/img'
+      path: '/api/img'
+      fullPath: '/api/img'
+      preLoaderRoute: typeof ApiImgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$region/$category': {
       id: '/$region/$category'
       path: '/$category'
@@ -167,6 +187,7 @@ const RegionRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   RegionRoute: RegionRouteWithChildren,
+  ApiImgRoute: ApiImgRoute,
   ArticleIdRoute: ArticleIdRoute,
   CategorySlugRoute: CategorySlugRoute,
 }
