@@ -275,7 +275,10 @@ async function fetchRawCategory(region: Region, slug: CategorySlug): Promise<Art
 
 async function curatedCategory(region: Region, slug: CategorySlug, limit = 30): Promise<Article[]> {
   const raw = await fetchRawCategory(region, slug);
-  if (!raw.length) return [];
+  if (!raw.length) {
+    console.error(`No raw RSS articles fetched at all for ${region}/${slug}`);
+    return [];
+  }
   const { articles } = await curateArticles({
     data: { region, topic: slug, articles: raw.slice(0, 40) },
   });
