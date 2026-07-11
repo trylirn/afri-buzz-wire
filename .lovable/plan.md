@@ -1,82 +1,102 @@
-# Add Nigeria section + Twitter thread copy tools
+## Goals
 
-## 1. Two top-level sections
+1. Split header into three destination pages: **Africa Pulse**, **Latest in Nigeria**, **America Stories** (home becomes a landing hub, not a stacked feed).
+2. Expand category coverage per region.
+3. Guarantee newest-first ordering everywhere.
+4. Use AI (Lovable AI Gateway) to (a) filter out items irrelevant to the region and (b) score/keep only likely-viral stories, then (c) rewrite each kept story into a punchy, human tweet.
+5. Every article carries its source image; the "Copy tweet" action copies text **and** image together so pasting into X attaches the picture.
+6. Add America Stories with the same feature set.
 
-Restructure the site so users clearly see two hubs:
+## Pages & navigation
 
-- **Africa Pulse** — existing pan-African feeds (BBC Africa, AllAfrica).
-- **Latest in Nigeria** — new region, powered by Nigeria-specific RSS feeds:
-  - Premium Times Nigeria (`https://www.premiumtimesng.com/feed`)
-  - Punch Nigeria (`https://punchng.com/feed/`)
-  - Channels TV (`https://www.channelstv.com/feed/`)
-  - Vanguard Nigeria (`https://www.vanguardngr.com/feed/`)
-  - The Guardian Nigeria (`https://guardian.ng/feed/`)
-  - AllAfrica Nigeria (`https://allafrica.com/tools/headlines/rdf/nigeria/headlines.rdf`)
+Header nav becomes: `Africa Pulse` · `Latest in Nigeria` · `America Stories` · (`Home` logo).
 
-Each region keeps the same four categories (Politics & Business, Sports, Entertainment, Tech), plus a "Top Stories" tab. The header nav becomes:
+Routes:
+- `/` — hub: hero + 3 region cards + top 3 viral picks from each region.
+- `/africa` and `/africa/$category`
+- `/nigeria` and `/nigeria/$category`
+- `/america` and `/america/$category` (new)
+- `/article/$id` (unchanged, works for all regions)
 
-`Africa Pulse ▾` (Top / Politics & Business / Sports / Entertainment / Tech)
-`Latest in Nigeria ▾` (same four + Top)
+Old `/category/$slug` keeps redirecting to `/africa/$slug`.
 
-Routing (region added as a segment):
+## Categories (per region)
 
-- `/` — homepage with both regions stacked (Africa first, Nigeria second, each with hero + 6 cards + "See all")
-- `/africa` and `/nigeria` — region landing pages
-- `/africa/$category` and `/nigeria/$category` — category pages
-- `/article/$id` — unchanged
+Shared base + region-specific extras:
 
-Old `/category/$slug` routes redirect to `/africa/$slug` so existing links keep working.
+- **Africa Pulse**: Top Stories, Breaking, Politics & Government, Business & Economy, Security & Conflict, Sports (AFCON focus), Entertainment & Culture, Tech & Science, Health, Xenophobia & Migration.
+- **Latest in Nigeria**: Top Stories, Breaking, Politics & Government, Business & Naira/FX, Security (banditry, kidnapping), State Developments, Sports, Entertainment (Naija), Tech, Education/Facts, Viral & Human Interest.
+- **America Stories**: Top Stories, Breaking, Politics (White House, Congress), Business & Markets, Crime & Justice, Sports (NFL/NBA/MLB), Entertainment (Hollywood), Tech, Health, Viral & Human Interest.
 
-## 2. Twitter-thread copy tools on every article
+Feeds added: for Nigeria — CBN FX page + Sahara Reporters + Legit.ng RSS; for America — AP Top, Reuters US, NYT Home, CBS News, ESPN, Variety, TechCrunch, CNN US.
 
-On the article card AND the article detail page, add two dedicated copy buttons that produce paste-ready text for X:
+## Ordering
 
-**Copy tweet (text only)** — copies a punchy, journalistic post in the "BREAKING:/JUST IN:" style you described:
+`fetchCategory` already sorts by `Date.parse(publishedAt)` desc. Confirming and adding a fallback: items missing dates get pushed to the bottom (not the top, as `|| 0` currently does). Also drop items older than 7 days for "Top" and "Breaking" tabs.
 
-```
-JUST IN: {Headline}.
+## AI filtering & tweet rewriting
 
-{One or two short sentences from the description, trimmed to fit within 275 chars total so the whole tweet stays under 280.}
-```
+New server function `curateArticles(region, articles)` in `src/lib/ai-curator.functions.ts`:
 
-Rules for text generation:
+- Sends a compact JSON list `[{id, title, description, source}]` (max 40 items per call) to Lovable AI Gateway.
+- Model: `google/gemini-2.5-flash` (fast, cheap, good at classification).
+- Prompt asks the model to, per article, return:
+  ```
+  { id, keep: boolean, region_relevant: boolean, virality: 1–10,
+    tweet: "<=270 char punchy human tweet, no hashtags spam, optional
+             leading BREAKING:/JUST IN: when appropriate, no URL" }
+  ```
+- Keep only `keep && region_relevant && virality >= 6`, sort by virality desc within recency buckets (newest 6h first, then older).
+- Cache curation output for 15 min keyed by `region+category+ids-hash` in an in-memory Map so we don't re-hit the model on every request.
+- Graceful fallback: if AI call fails or key missing, we return the raw feed with the current heuristic-generated tweet, so the site never breaks.
 
-- Prefix logic: if the headline already starts with `BREAKING`, `JUST IN`, `UPDATE`, keep it as-is; otherwise prepend `JUST IN:` for items published within the last 3 hours, `UPDATE:` for 3–12h, and no prefix for older/feature stories.
-- Strip site suffixes like " — Premium Times", " | Punch", " - Channels TV".
-- Convert straight quotes/entities, collapse whitespace, remove trailing ellipses from RSS teasers.
-- Never include the URL in this button (so it can be tweet #1 of a thread).
-- Character counter shown next to the button; auto-truncate the description (not the headline) at the last full word before 275 chars and append `…`.
+Region-relevance rule embedded in prompt:
+- Africa: story must be about an African country, African person, or Africa-wide topic. A Frenchman scoring in Ligue 1 = drop. A Moroccan winning at AFCON = keep.
+- Nigeria: must involve Nigeria, Nigerians abroad, Naira/FX, or directly affect Nigerians.
+- America: must involve the US, Americans, US markets, or directly affect US audiences.
 
-**Copy source (reply tweet)** — copies the second tweet of the thread:
+Virality signals we tell the model to weight: corruption, disaster, scandal, breaking security incidents, big-money government projects, celebrity drama, sports wins, human-interest video moments, viral clips, FX rate moves, "facts" thread material.
 
-```
-Source: {publication name} — {url}
-```
+## Tweet copy with image
 
-The URL is the original article link. This is what the user pastes as a reply to their first tweet.
+`TweetActions` upgrade:
+- **Copy tweet + image** (primary): fetches `article.image` server-side through a small proxy route `api/img?u=<url>` (avoids CORS), then uses `navigator.clipboard.write([new ClipboardItem({ 'image/png': blob, 'text/plain': text })])`. On paste into X's web composer this attaches the image and fills the text.
+- **Copy text only** (fallback for browsers without ClipboardItem image support — Safari/Firefox).
+- **Copy source reply** (unchanged).
+- **Download image** button (belt-and-braces so users can drag it into X mobile).
 
-**Copy full thread** — convenience button that copies both, separated by `\n---\n`, so a power user can grab everything at once.
+If no image on the article, the button gracefully degrades to text-only and hides the image affordance.
 
-UI details:
+## AI-key handling
 
-- Small icon buttons (Copy, Link, ListOrdered from lucide-react) with tooltips.
-- On click: write to clipboard via `navigator.clipboard.writeText`, then flash a "Copied" state for ~1.2s (checkmark icon).
-- On the article detail page these live in a dedicated "Post to X" panel above the "Read full story" button, showing a live preview of tweet #1 and tweet #2 with character counts.
-- On article cards a compact `Copy tweet` button appears on hover (always visible on mobile) so you can grab posts straight from the feed without opening each one.
+Requires `LOVABLE_API_KEY`. If not present in the sandbox, we call `ai_gateway--create` during build to provision it. Read only inside `.handler()`.
 
-## 3. Small fixes bundled in
+## Files touched / created
 
-- Fix the `timeAgo` hydration mismatch (server renders "44m ago", client re-renders "45m ago") by computing time-ago inside a `useEffect` after mount, rendering a stable ISO date on the server.
-- Update `__root.tsx` title/description and the homepage hero copy to reflect the two-region structure.
+Created:
+- `src/lib/ai-curator.functions.ts` — `curateArticles` server fn + in-memory cache.
+- `src/lib/ai-gateway.server.ts` — provider helper (per knowledge card).
+- `src/routes/api/img.ts` — image proxy for clipboard write.
+- `src/routes/index.tsx` rewritten as hub landing.
+- (New region tree stays on existing `$region.*` files — America added via `VALID` list update.)
 
-4. Also add a 15 mins update intervals for all the news. So we get the latest news at 15 mins intervals 
+Edited:
+- `src/lib/news.functions.ts` — add America feeds, add new categories, tighten sort, integrate `curateArticles` in `fetchCategory` result path.
+- `src/components/SiteHeader.tsx` — new 3-item top nav; category dropdown per region page (not stacked on every screen).
+- `src/components/TweetActions.tsx` — clipboard image support + download button.
+- `src/components/ArticleCard.tsx` — use AI-written `tweet` when present.
+- `src/routes/$region.tsx` — add `america` to VALID.
+- `src/routes/$region.index.tsx` / `$region.$category.tsx` — render curated list, use `article.tweet` for previews.
+- `src/routes/__root.tsx` — site title/description update to reflect 3 regions.
 
-## Technical section
+## Out of scope
 
-- `src/lib/news.functions.ts`: add a `Region = "africa" | "nigeria"` type. Change `FEEDS` to `FEEDS[region][category]`. Update `getCategoryNews`, `getHomeNews` (returns `{ africa: {...}, nigeria: {...} }`), and `getArticle` to search both regions. Add a `guessBreaking(article)` helper returning the prefix based on publish age.
-- New `src/lib/tweet.ts` (pure, client-safe): exports `buildTweetText(article)`, `buildSourceTweet(article)`, `buildThread(article)`, plus `TWEET_MAX = 280` and a `truncateForTweet` util. Unit-testable, no server deps.
-- New `src/components/TweetActions.tsx`: renders the three copy buttons + optional preview. Used by `ArticleCard` (compact variant) and the article page (full variant).
-- Routes: add `src/routes/africa.tsx` (layout), `src/routes/africa.index.tsx`, `src/routes/africa.$category.tsx`, and the same trio for `nigeria`. Keep `src/routes/category.$slug.tsx` as a thin redirect to `/africa/$slug`.
-- `SiteHeader.tsx`: two nav groups with dropdowns (use existing shadcn `NavigationMenu` or a simple hover panel).
-- `index.tsx`: fetch `getHomeNews()`, render two stacked region blocks with clear section headings and "See all Africa news" / "See all Nigeria news" links.
-- All new copy happens client-side; no new secrets or backend calls.
+- No user accounts, no scheduled posting to X (copy-paste only, as before).
+- No paid news APIs; RSS + AI curation only.
+
+## Technical notes
+
+- AI curator batch size 40, one call per category fetch. Home hub triggers 3 calls total (top per region) — cheap on Gemini Flash.
+- `ClipboardItem` with image blobs works on Chromium and modern Safari; Firefox falls back to text-only automatically.
+- Image proxy route must set `cache-control: public, max-age=3600` and cap response size at ~5 MB to protect the worker.
+- All AI calls use `generateText` with `Output.object` (zod schema) so parsing is strict; failures fall back to heuristic path.
