@@ -23,18 +23,23 @@ const CurationSchema = z.object({
   ),
 });
 
-const CACHE = new Map<string, { ts: number; data: Article[] }>();
-const CACHE_TTL = 15 * 60 * 1000;
+// Permanent, per-article cache: once an article has been curated by the AI,
+// its result (kept/dropped + tweet text) is stored under its own id forever
+// (until the server restarts), so it never gets silently re-written.
+// Only articles we've never seen before get sent to the AI.
+const ARTICLE_CACHE = new Map<string, Article & { virality: number }>();
 
-function cacheKey(region: Region, topic: string, articles: Article[]): string {
-  const ids = articles
-    .map((a) => a.id)
-    .sort()
-    .join(",");
-  // small hash
-  let h = 0;
-  for (let i = 0; i < ids.length; i++) h = (h * 31 + ids.charCodeAt(i)) | 0;
-  return `${region}:${topic}:${h}`;
+function sortEnriched(list: (Article & { virality: number })[]): Article[] {
+  const now = Date.now();
+  return [...list].sort((a, b) => {
+    const ta = Date.parse(a.publishedAt) || 0;
+    const tb = Date.parse(b.publishedAt) || 0;
+    const freshA = now - ta < 6 * 3600 * 1000 ? 1 : 0;
+    const freshB = now - tb < 6 * 3600 * 1000 ? 1 : 0;
+    if (freshA !== freshB) return freshB - freshA;
+    if (a.virality !== b.virality) return b.virality - a.virality;
+    return tb - ta;
+  });
 }
 
 function regionRule(region: Region): string {
@@ -72,18 +77,26 @@ export const curateArticles = createServerFn({ method: "POST" })
     const { region, topic, articles } = data;
     if (!articles.length) return { articles: [] as Article[] };
 
-    const key = cacheKey(region, topic, articles);
-    const cached = CACHE.get(key);
-    if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      return { articles: cached.data };
+    // Split into articles we've already curated (permanent hit) vs brand-new ones.
+    const cachedResults: (Article & { virality: number })[] = [];
+    const uncached: Article[] = [];
+    for (const a of articles) {
+      const hit = ARTICLE_CACHE.get(a.id);
+      if (hit) cachedResults.push(hit);
+      else uncached.push(a);
+    }
+
+    // Nothing new — serve straight from the permanent cache, no AI call at all.
+    if (!uncached.length) {
+      return { articles: sortEnriched(cachedResults) };
     }
 
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
-      return { articles }; // graceful fallback
+      return { articles: [...cachedResults, ...uncached] }; // graceful fallback
     }
 
-    const slim = articles.slice(0, 40).map((a) => ({
+    const slim = uncached.slice(0, 40).map((a) => ({
       id: a.id,
       title: a.title.slice(0, 180),
       description: (a.description || "").slice(0, 240),
@@ -108,12 +121,15 @@ Return one result object per input article, in the same order, keyed by the inpu
         schema: CurationSchema,
         system,
         prompt: userPrompt,
+        // Hard cap so a slow/stuck AI Gateway call can never hang the whole
+        // page load — it fails fast into the catch block below instead.
+        abortSignal: AbortSignal.timeout(15000),
       });
 
       const results = object.results as CurationResult[];
       const byId = new Map(results.map((r) => [r.id, r]));
 
-      const enriched: Article[] = articles
+      const freshlyEnriched: (Article & { virality: number })[] = uncached
         .map((a) => {
           const r = byId.get(a.id);
           if (!r) return null;
@@ -127,28 +143,19 @@ Return one result object per input article, in the same order, keyed by the inpu
         })
         .filter((x): x is Article & { virality: number } => x !== null);
 
-      // Sort: recency bucket (< 6h first) then virality then time
-      const now = Date.now();
-      enriched.sort((a, b) => {
-        const ta = Date.parse(a.publishedAt) || 0;
-        const tb = Date.parse(b.publishedAt) || 0;
-        const freshA = now - ta < 6 * 3600 * 1000 ? 1 : 0;
-        const freshB = now - tb < 6 * 3600 * 1000 ? 1 : 0;
-        if (freshA !== freshB) return freshB - freshA;
-        const va = (a as Article & { virality?: number }).virality ?? 0;
-        const vb = (b as Article & { virality?: number }).virality ?? 0;
-        if (va !== vb) return vb - va;
-        return tb - ta;
-      });
+      // Cache every newly curated article permanently, keyed by its own id,
+      // so it's never sent back to the AI or rewritten again.
+      for (const a of freshlyEnriched) {
+        ARTICLE_CACHE.set(a.id, a);
+      }
 
-      CACHE.set(key, { ts: Date.now(), data: enriched });
-      return { articles: enriched };
+      return { articles: sortEnriched([...cachedResults, ...freshlyEnriched]) };
     } catch (err) {
       if (NoObjectGeneratedError.isInstance(err)) {
         console.error("AI curator: no object", (err as Error).message);
       } else {
         console.error("AI curator failed", err);
       }
-      return { articles };
+      return { articles: [...cachedResults, ...uncached] };
     }
   });
