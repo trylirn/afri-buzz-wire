@@ -289,15 +289,25 @@ export const getCategoryNews = createServerFn({ method: "GET" })
     return { articles };
   });
 
+// Runs a settled promise and returns [] instead of throwing, so one slow or
+// failed region/category can never take the whole page down with it.
+async function safe(p: Promise<Article[]>): Promise<Article[]> {
+  const r = await Promise.allSettled([p]);
+  const [result] = r;
+  if (result.status === "fulfilled") return result.value;
+  console.error("category pipeline failed", result.reason);
+  return [];
+}
+
 export const getRegionHome = createServerFn({ method: "GET" })
   .inputValidator((data: { region: Region }) => data)
   .handler(async ({ data }) => {
     const [top, politics, sports, entertainment, tech] = await Promise.all([
-      curatedCategory(data.region, "top", 15),
-      curatedCategory(data.region, "politics-business", 6),
-      curatedCategory(data.region, "sports", 6),
-      curatedCategory(data.region, "entertainment", 6),
-      curatedCategory(data.region, "tech", 6),
+      safe(curatedCategory(data.region, "top", 15)),
+      safe(curatedCategory(data.region, "politics-business", 6)),
+      safe(curatedCategory(data.region, "sports", 6)),
+      safe(curatedCategory(data.region, "entertainment", 6)),
+      safe(curatedCategory(data.region, "tech", 6)),
     ]);
     return {
       top,
@@ -311,7 +321,7 @@ export const getRegionHome = createServerFn({ method: "GET" })
 export const getHomeNews = createServerFn({ method: "GET" }).handler(async () => {
   const regions: Region[] = ["africa", "nigeria", "america"];
   const [africa, nigeria, america] = await Promise.all(
-    regions.map((r) => curatedCategory(r, "top", 6)),
+    regions.map((r) => safe(curatedCategory(r, "top", 6))),
   );
   return {
     africa: { top: africa },
