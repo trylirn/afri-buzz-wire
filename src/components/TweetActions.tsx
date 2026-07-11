@@ -46,7 +46,7 @@ export function TweetActions({ article, variant = "compact" }: { article: Articl
           <CopyButton text={source} label="Copy source" icon={<Link2 className="h-3.5 w-3.5" />} />
           <CopyButton text={buildThread(article)} label="Copy full thread" icon={<ListOrdered className="h-3.5 w-3.5" />} />
           {hasImage && (
-            
+            <a
               href={proxiedImage(article.image!)}
               download
               className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground transition-colors hover:border-accent hover:text-accent"
