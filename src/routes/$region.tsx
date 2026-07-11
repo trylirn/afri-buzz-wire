@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, notFound } from "@tanstack/react-router";
 import type { Region } from "@/lib/news.functions";
 
-const VALID: Region[] = ["africa", "nigeria"];
+const VALID: Region[] = ["africa", "nigeria", "america"];
 
 export const Route = createFileRoute("/$region")({
   beforeLoad: ({ params }) => {

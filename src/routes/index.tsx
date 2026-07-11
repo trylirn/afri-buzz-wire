@@ -44,19 +44,22 @@ function Home() {
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <section className="mb-10 rounded-sm border border-border bg-card p-6 md:p-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Africa & Nigeria news wire</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">
+            AI-curated viral news wire
+          </p>
           <h1 className="mt-2 font-serif text-3xl font-bold leading-tight md:text-4xl">
-            Real, timely news — ready to post as a tweet in one click.
+            Real news, hand-picked by AI for what will pop on X.
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Two live desks: pan-African headlines and dedicated Nigeria coverage. Every story has
-            a one-tap "Copy tweet" and "Copy source" so you can publish a clean X thread instantly.
-            Feeds refresh every 15 minutes.
+            Three desks — Africa Pulse, Latest in Nigeria, America Stories — each filtered for
+            regional relevance and virality. Every story comes with a ready-to-post tweet and its
+            source image. Copy, paste, and publish.
           </p>
         </section>
 
         <RegionBlock region="africa" title="Africa Pulse" articles={data.africa.top} />
         <RegionBlock region="nigeria" title="Latest in Nigeria" articles={data.nigeria.top} />
+        <RegionBlock region="america" title="America Stories" articles={data.america.top} />
       </main>
       <SiteFooter />
     </div>
@@ -80,7 +83,7 @@ function RegionBlock({ region, title, articles }: { region: Region; title: strin
       </div>
       {hero && <div className="mb-6"><ArticleCard article={hero} size="lg" /></div>}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {rest.slice(0, 6).map((a) => <ArticleCard key={a.id} article={a} />)}
+        {rest.slice(0, 5).map((a) => <ArticleCard key={a.id} article={a} />)}
       </div>
     </section>
   );
