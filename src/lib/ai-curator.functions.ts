@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { generateText, Output, NoObjectGeneratedError } from "ai";
+import { generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import type { Article, Region } from "./news.functions";
 
@@ -103,14 +103,14 @@ Return one result object per input article, in the same order, keyed by the inpu
       const gateway = createLovableAiGatewayProvider(apiKey);
       const model = gateway("google/gemini-2.5-flash");
 
-      const { experimental_output } = await generateText({
+      const { object } = await generateObject({
         model,
-        experimental_output: Output.object({ schema: CurationSchema }),
+        schema: CurationSchema,
         system,
         prompt: userPrompt,
       });
 
-      const results = experimental_output.results as CurationResult[];
+      const results = object.results as CurationResult[];
       const byId = new Map(results.map((r) => [r.id, r]));
 
       const enriched: Article[] = articles
