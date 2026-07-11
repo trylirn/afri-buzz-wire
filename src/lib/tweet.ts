@@ -3,9 +3,11 @@ import type { Article } from "./news.functions";
 export const TWEET_MAX = 280;
 
 function cleanTitle(title: string): string {
-  // Strip common site suffixes like " - Punch", " | Vanguard", " — Premium Times"
   return title
-    .replace(/\s*[-|—–]\s*(Premium Times|Punch|Channels(?: TV)?|Vanguard|The Guardian(?: Nigeria)?|Guardian(?: NG)?|BBC(?: News)?(?: Africa)?|AllAfrica[^-|—–]*)\s*$/i, "")
+    .replace(
+      /\s*[-|—–]\s*(Premium Times|Punch|Channels(?: TV)?|Vanguard|The Guardian(?: Nigeria)?|Guardian(?: NG)?|BBC(?: News)?(?: Africa)?|AllAfrica[^-|—–]*|NYT|NBC News|CBS News|AP News|TechCrunch|Variety|Hollywood Reporter|ESPN|Sahara Reporters)\s*$/i,
+      "",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -38,6 +40,11 @@ function truncateAtWord(text: string, max: number): string {
 }
 
 export function buildTweetText(article: Article): string {
+  // Prefer AI-written tweet when present
+  if (article.tweet && article.tweet.trim()) {
+    return truncateAtWord(article.tweet.trim(), TWEET_MAX);
+  }
+
   const prefix = pickPrefix(article);
   const title = cleanTitle(article.title);
   const desc = cleanDescription(article.description);
@@ -48,8 +55,7 @@ export function buildTweetText(article: Article): string {
   const withBody = `${headline}\n\n${desc}`;
   if (withBody.length <= TWEET_MAX) return withBody;
 
-  // Truncate description to fit
-  const remaining = TWEET_MAX - headline.length - 2; // for \n\n
+  const remaining = TWEET_MAX - headline.length - 2;
   if (remaining < 40) return truncateAtWord(headline, TWEET_MAX);
   return `${headline}\n\n${truncateAtWord(desc, remaining)}`;
 }

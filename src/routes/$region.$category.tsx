@@ -2,23 +2,40 @@ import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getCategoryNews, type CategorySlug, type Region } from "@/lib/news.functions";
 import { ArticleCard } from "@/components/ArticleCard";
-import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
+import { SiteHeader, SiteFooter, RegionCategoryNav } from "@/components/SiteHeader";
 
 const CATEGORY_META: Record<CategorySlug, { title: string; blurb: string }> = {
-  top: { title: "Top Stories", blurb: "The biggest stories right now." },
+  top: { title: "Top Stories", blurb: "The biggest stories right now, AI-picked for virality." },
+  breaking: { title: "Breaking News", blurb: "Just-in stories with high urgency." },
   "politics-business": { title: "Politics & Business", blurb: "Governance, economy, and markets." },
+  security: { title: "Security & Crime", blurb: "Conflict, banditry, and public safety." },
   sports: { title: "Sports", blurb: "Football, AFCON, athletics and more." },
-  entertainment: { title: "Entertainment & Culture", blurb: "Music, film, Afrobeats and culture." },
+  entertainment: { title: "Entertainment & Culture", blurb: "Music, film, celebrity and culture." },
   tech: { title: "Tech & Science", blurb: "Startups, innovation and scientific breakthroughs." },
+  health: { title: "Health", blurb: "Public health, medicine, wellness." },
+  viral: { title: "Viral & Human Interest", blurb: "Emotional clips and stories that travel." },
+  fx: { title: "Business & Naira/FX", blurb: "Currency, markets and the economy." },
 };
 
 const REGION_LABEL: Record<Region, string> = {
   africa: "Africa Pulse",
   nigeria: "Latest in Nigeria",
+  america: "America Stories",
 };
 
-const VALID_CATS: CategorySlug[] = ["politics-business", "sports", "entertainment", "tech", "top"];
-const VALID_REGIONS: Region[] = ["africa", "nigeria"];
+const VALID_CATS: CategorySlug[] = [
+  "top",
+  "breaking",
+  "politics-business",
+  "security",
+  "sports",
+  "entertainment",
+  "tech",
+  "health",
+  "viral",
+  "fx",
+];
+const VALID_REGIONS: Region[] = ["africa", "nigeria", "america"];
 
 const categoryQuery = (region: Region, slug: CategorySlug) =>
   queryOptions({
@@ -79,7 +96,8 @@ export const Route = createFileRoute("/$region/$category")({
 
 function CategoryPage() {
   const { region, category } = Route.useParams();
-  const { data } = useSuspenseQuery(categoryQuery(region as Region, category as CategorySlug));
+  const r = region as Region;
+  const { data } = useSuspenseQuery(categoryQuery(r, category as CategorySlug));
   const meta = CATEGORY_META[category as CategorySlug];
   const [hero, ...rest] = data.articles;
 
@@ -87,16 +105,20 @@ function CategoryPage() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <header className="mb-8 border-b border-border pb-4">
+        <header className="mb-6 border-b border-border pb-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">
-            {REGION_LABEL[region as Region]} · Section
+            {REGION_LABEL[r]} · Section
           </p>
           <h1 className="mt-1 font-serif text-4xl font-bold md:text-5xl">{meta.title}</h1>
           <p className="mt-2 text-muted-foreground">{meta.blurb}</p>
         </header>
 
+        <RegionCategoryNav region={r} />
+
         {data.articles.length === 0 ? (
-          <p className="py-16 text-center text-muted-foreground">No stories available right now.</p>
+          <p className="py-16 text-center text-muted-foreground">
+            No stories cleared curation for this section yet.
+          </p>
         ) : (
           <>
             {hero && <div className="mb-10"><ArticleCard article={hero} size="lg" /></div>}
