@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, Link2, ListOrdered, Image as ImageIcon, Download } from "lucide-react";
+import { Copy, Check, Link2, ListOrdered, Download } from "lucide-react";
 import type { Article } from "@/lib/news.functions";
 import { buildTweetText, buildSourceTweet, buildThread, TWEET_MAX } from "@/lib/tweet";
 
@@ -9,41 +9,12 @@ function proxiedImage(url: string): string {
   return `/api/img?u=${encodeURIComponent(url)}`;
 }
 
-async function copyTextAndImage(text: string, imageUrl: string | null): Promise<"text+image" | "text"> {
-  if (imageUrl && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-    try {
-      const res = await fetch(proxiedImage(imageUrl));
-      if (res.ok) {
-        const blob = await res.blob();
-        // Chrome only accepts PNG in ClipboardItem for images. Convert if needed via canvas.
-        const pngBlob = blob.type === "image/png" ? blob : await toPng(blob);
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "image/png": pngBlob,
-            "text/plain": new Blob([text], { type: "text/plain" }),
-          }),
-        ]);
-        return "text+image";
-      }
-    } catch {
-      // fall through to text-only
-    }
-  }
+async function copyTextAndImage(text: string): Promise<"text"> {
+  // Text-only: copying an image alongside the text made paste targets (X's
+  // composer included) grab the image and drop the tweet text, so we only
+  // ever copy the text now.
   await navigator.clipboard.writeText(text);
   return "text";
-}
-
-async function toPng(blob: Blob): Promise<Blob> {
-  const bitmap = await createImageBitmap(blob);
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("no canvas");
-  ctx.drawImage(bitmap, 0, 0);
-  return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
-  });
 }
 
 export function TweetActions({ article, variant = "compact" }: { article: Article; variant?: Variant }) {
@@ -69,14 +40,13 @@ export function TweetActions({ article, variant = "compact" }: { article: Articl
         <div className="mt-4 flex flex-wrap gap-2">
           <CopyTweetButton
             text={tweet}
-            image={article.image}
-            label={hasImage ? "Copy tweet + image" : "Copy tweet"}
+            label="Copy tweet"
             primary
           />
           <CopyButton text={source} label="Copy source" icon={<Link2 className="h-3.5 w-3.5" />} />
           <CopyButton text={buildThread(article)} label="Copy full thread" icon={<ListOrdered className="h-3.5 w-3.5" />} />
           {hasImage && (
-            <a
+            
               href={proxiedImage(article.image!)}
               download
               className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground transition-colors hover:border-accent hover:text-accent"
@@ -86,10 +56,11 @@ export function TweetActions({ article, variant = "compact" }: { article: Articl
             </a>
           )}
         </div>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Tip: paste into X's composer — the image attaches automatically when your browser
-          supports clipboard images (Chrome, Edge, latest Safari).
-        </p>
+        {hasImage && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Tip: "Copy tweet" copies text only. Use "Save image" to download the photo and attach it yourself when posting.
+          </p>
+        )}
       </div>
     );
   }
@@ -98,8 +69,7 @@ export function TweetActions({ article, variant = "compact" }: { article: Articl
     <div className="flex flex-wrap gap-1.5" onClick={(e) => e.preventDefault()}>
       <CopyTweetButton
         text={tweet}
-        image={article.image}
-        label={hasImage ? "Tweet + img" : "Tweet"}
+        label="Tweet"
         size="sm"
       />
       <CopyButton text={source} label="Source" icon={<Link2 className="h-3 w-3" />} size="sm" />
@@ -144,24 +114,22 @@ function TweetPreview({
 
 function CopyTweetButton({
   text,
-  image,
   label,
   primary,
   size = "md",
 }: {
   text: string;
-  image: string | null;
   label: string;
   primary?: boolean;
   size?: "sm" | "md";
 }) {
-  const [state, setState] = useState<"idle" | "text+image" | "text">("idle");
+  const [state, setState] = useState<"idle" | "text">("idle");
 
   const onClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const result = await copyTextAndImage(text, image);
+      const result = await copyTextAndImage(text);
       setState(result);
       setTimeout(() => setState("idle"), 1500);
     } catch {
@@ -174,9 +142,8 @@ function CopyTweetButton({
     ? "bg-accent text-accent-foreground hover:opacity-90"
     : "border border-border bg-background text-foreground hover:border-accent hover:text-accent";
 
-  const icon = state === "idle" ? (image ? <ImageIcon className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />) : <Check className="h-3.5 w-3.5" />;
-  const displayLabel =
-    state === "text+image" ? "Copied w/ image" : state === "text" ? "Copied text" : label;
+  const icon = state === "idle" ? <Copy className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />;
+  const displayLabel = state === "text" ? "Copied" : label;
 
   return (
     <button
