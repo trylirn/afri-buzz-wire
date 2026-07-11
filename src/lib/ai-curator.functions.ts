@@ -145,7 +145,7 @@ Return one result object per input article, in the same order, keyed by the inpu
       return { articles: enriched };
     } catch (err) {
       if (NoObjectGeneratedError.isInstance(err)) {
-        console.error("AI curator: no object", err.message);
+        console.error("AI curator: no object", (err as Error).message);
       } else {
         console.error("AI curator failed", err);
       }
