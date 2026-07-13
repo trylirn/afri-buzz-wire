@@ -1,102 +1,43 @@
-## Goals
+# Fix: News feed showing empty
 
-1. Split header into three destination pages: **Africa Pulse**, **Latest in Nigeria**, **America Stories** (home becomes a landing hub, not a stacked feed).
-2. Expand category coverage per region.
-3. Guarantee newest-first ordering everywhere.
-4. Use AI (Lovable AI Gateway) to (a) filter out items irrelevant to the region and (b) score/keep only likely-viral stories, then (c) rewrite each kept story into a punchy, human tweet.
-5. Every article carries its source image; the "Copy tweet" action copies text **and** image together so pasting into X attaches the picture.
-6. Add America Stories with the same feature set.
+## What's actually broken
 
-## Pages & navigation
+Server logs show two failures on every request:
 
-Header nav becomes: `Africa Pulse` · `Latest in Nigeria` · `America Stories` · (`Home` logo).
+1. **`Error: Server function info not found for 29c25...`** — `getRegionHome` / `getCategoryNews` (server fns) call `curateArticles` (also a server fn) directly. TanStack's server-fn runtime can't resolve the inner fn's ID in that path, so every category pipeline throws and `safe()` returns `[]`. That is why the homepage payload is all empty arrays.
+2. **`AI_APICallError: Too Many Requests` (429) from the Lovable AI Gateway** — free-tier rate limit. Even once #1 is fixed, curation will intermittently fail, and right now that path also returns `[]` in some branches.
 
-Routes:
-- `/` — hub: hero + 3 region cards + top 3 viral picks from each region.
-- `/africa` and `/africa/$category`
-- `/nigeria` and `/nigeria/$category`
-- `/america` and `/america/$category` (new)
-- `/article/$id` (unchanged, works for all regions)
+## Fix
 
-Old `/category/$slug` keeps redirecting to `/africa/$slug`.
+### 1. Stop calling a server fn from inside a server fn
 
-## Categories (per region)
+Refactor `src/lib/ai-curator.functions.ts`:
+- Extract the curation logic into a plain exported `async function curateArticlesImpl({ region, topic, articles })`.
+- Keep `curateArticles` as a thin `createServerFn` wrapper that just calls `curateArticlesImpl` (in case anything client-side still uses it).
+- In `src/lib/news.functions.ts`, import and call `curateArticlesImpl` directly instead of `curateArticles({ data: ... })`. This is an in-process function call — no HTTP hop, no server-fn ID lookup.
 
-Shared base + region-specific extras:
+### 2. Never return empty when the AI fails
 
-- **Africa Pulse**: Top Stories, Breaking, Politics & Government, Business & Economy, Security & Conflict, Sports (AFCON focus), Entertainment & Culture, Tech & Science, Health, Xenophobia & Migration.
-- **Latest in Nigeria**: Top Stories, Breaking, Politics & Government, Business & Naira/FX, Security (banditry, kidnapping), State Developments, Sports, Entertainment (Naija), Tech, Education/Facts, Viral & Human Interest.
-- **America Stories**: Top Stories, Breaking, Politics (White House, Congress), Business & Markets, Crime & Justice, Sports (NFL/NBA/MLB), Entertainment (Hollywood), Tech, Health, Viral & Human Interest.
+In `curateArticlesImpl`:
+- On any thrown error (including 429), on `NoObjectGeneratedError`, and on the existing "kept 0 of N" safety net → return the raw uncached articles merged with cached ones, sorted by date. User always sees news.
+- Log the 429 as a warning, not an error spam loop.
 
-Feeds added: for Nigeria — CBN FX page + Sahara Reporters + Legit.ng RSS; for America — AP Top, Reuters US, NYT Home, CBS News, ESPN, Variety, TechCrunch, CNN US.
+### 3. Light rate-limit protection
 
-## Ordering
+- Cap AI batches: send at most 25 articles per call (was 40).
+- On the region home, curation runs for 5 categories × 3 regions in parallel = 15 concurrent AI calls on a cold cache — that's what's triggering 429. Add a tiny in-process concurrency limiter (max 3 concurrent `generateObject` calls) inside `ai-curator.functions.ts`. No new deps; a small promise-queue helper.
 
-`fetchCategory` already sorts by `Date.parse(publishedAt)` desc. Confirming and adding a fallback: items missing dates get pushed to the bottom (not the top, as `|| 0` currently does). Also drop items older than 7 days for "Top" and "Breaking" tabs.
+## Files touched
 
-## AI filtering & tweet rewriting
-
-New server function `curateArticles(region, articles)` in `src/lib/ai-curator.functions.ts`:
-
-- Sends a compact JSON list `[{id, title, description, source}]` (max 40 items per call) to Lovable AI Gateway.
-- Model: `google/gemini-2.5-flash` (fast, cheap, good at classification).
-- Prompt asks the model to, per article, return:
-  ```
-  { id, keep: boolean, region_relevant: boolean, virality: 1–10,
-    tweet: "<=270 char punchy human tweet, no hashtags spam, optional
-             leading BREAKING:/JUST IN: when appropriate, no URL" }
-  ```
-- Keep only `keep && region_relevant && virality >= 6`, sort by virality desc within recency buckets (newest 6h first, then older).
-- Cache curation output for 15 min keyed by `region+category+ids-hash` in an in-memory Map so we don't re-hit the model on every request.
-- Graceful fallback: if AI call fails or key missing, we return the raw feed with the current heuristic-generated tweet, so the site never breaks.
-
-Region-relevance rule embedded in prompt:
-- Africa: story must be about an African country, African person, or Africa-wide topic. A Frenchman scoring in Ligue 1 = drop. A Moroccan winning at AFCON = keep.
-- Nigeria: must involve Nigeria, Nigerians abroad, Naira/FX, or directly affect Nigerians.
-- America: must involve the US, Americans, US markets, or directly affect US audiences.
-
-Virality signals we tell the model to weight: corruption, disaster, scandal, breaking security incidents, big-money government projects, celebrity drama, sports wins, human-interest video moments, viral clips, FX rate moves, "facts" thread material.
-
-## Tweet copy with image
-
-`TweetActions` upgrade:
-- **Copy tweet + image** (primary): fetches `article.image` server-side through a small proxy route `api/img?u=<url>` (avoids CORS), then uses `navigator.clipboard.write([new ClipboardItem({ 'image/png': blob, 'text/plain': text })])`. On paste into X's web composer this attaches the image and fills the text.
-- **Copy text only** (fallback for browsers without ClipboardItem image support — Safari/Firefox).
-- **Copy source reply** (unchanged).
-- **Download image** button (belt-and-braces so users can drag it into X mobile).
-
-If no image on the article, the button gracefully degrades to text-only and hides the image affordance.
-
-## AI-key handling
-
-Requires `LOVABLE_API_KEY`. If not present in the sandbox, we call `ai_gateway--create` during build to provision it. Read only inside `.handler()`.
-
-## Files touched / created
-
-Created:
-- `src/lib/ai-curator.functions.ts` — `curateArticles` server fn + in-memory cache.
-- `src/lib/ai-gateway.server.ts` — provider helper (per knowledge card).
-- `src/routes/api/img.ts` — image proxy for clipboard write.
-- `src/routes/index.tsx` rewritten as hub landing.
-- (New region tree stays on existing `$region.*` files — America added via `VALID` list update.)
-
-Edited:
-- `src/lib/news.functions.ts` — add America feeds, add new categories, tighten sort, integrate `curateArticles` in `fetchCategory` result path.
-- `src/components/SiteHeader.tsx` — new 3-item top nav; category dropdown per region page (not stacked on every screen).
-- `src/components/TweetActions.tsx` — clipboard image support + download button.
-- `src/components/ArticleCard.tsx` — use AI-written `tweet` when present.
-- `src/routes/$region.tsx` — add `america` to VALID.
-- `src/routes/$region.index.tsx` / `$region.$category.tsx` — render curated list, use `article.tweet` for previews.
-- `src/routes/__root.tsx` — site title/description update to reflect 3 regions.
+- `src/lib/ai-curator.functions.ts` — extract `curateArticlesImpl`, add concurrency limiter, always-fallback-to-raw on error.
+- `src/lib/news.functions.ts` — call `curateArticlesImpl` instead of the server-fn wrapper.
 
 ## Out of scope
 
-- No user accounts, no scheduled posting to X (copy-paste only, as before).
-- No paid news APIs; RSS + AI curation only.
+- No UI changes.
+- No new feeds / categories / AI prompt changes.
+- No paid AI plan required — falls back gracefully when rate-limited.
 
-## Technical notes
+## Verification
 
-- AI curator batch size 40, one call per category fetch. Home hub triggers 3 calls total (top per region) — cheap on Gemini Flash.
-- `ClipboardItem` with image blobs works on Chromium and modern Safari; Firefox falls back to text-only automatically.
-- Image proxy route must set `cache-control: public, max-age=3600` and cap response size at ~5 MB to protect the worker.
-- All AI calls use `generateText` with `Output.object` (zod schema) so parsing is strict; failures fall back to heuristic path.
+After the edit: reload `/`, confirm all three region blocks render articles, and check server logs no longer show `Server function info not found`. Remaining 429s (if any) will log as warnings and the raw feed shows instead.

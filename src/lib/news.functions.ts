@@ -1,33 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { XMLParser } from "fast-xml-parser";
-import { curateArticles } from "./ai-curator.functions";
+import { curateArticlesImpl } from "./ai-curator.server";
+import type { Article, Region, CategorySlug } from "./news-types";
+export type { Article, Region, CategorySlug } from "./news-types";
 
-export type Article = {
-  id: string;
-  title: string;
-  description: string;
-  link: string;
-  source: string;
-  publishedAt: string;
-  image: string | null;
-  category: string;
-  region: Region;
-  tweet?: string;
-};
-
-export type Region = "africa" | "nigeria" | "america";
-
-export type CategorySlug =
-  | "top"
-  | "breaking"
-  | "politics-business"
-  | "security"
-  | "sports"
-  | "entertainment"
-  | "tech"
-  | "health"
-  | "viral"
-  | "fx";
 
 type Feed = { url: string; source: string };
 
@@ -279,8 +255,10 @@ async function curatedCategory(region: Region, slug: CategorySlug, limit = 30): 
     console.error(`No raw RSS articles fetched at all for ${region}/${slug}`);
     return [];
   }
-  const { articles } = await curateArticles({
-    data: { region, topic: slug, articles: raw.slice(0, 40) },
+  const { articles } = await curateArticlesImpl({
+    region,
+    topic: slug,
+    articles: raw.slice(0, 40),
   });
   return articles.slice(0, limit);
 }
@@ -347,8 +325,10 @@ export const getArticle = createServerFn({ method: "GET" })
     const found = all.flat().find((a) => a.id === data.id);
     if (!found) return { article: null };
     // Curate this single one to attach a tweet
-    const { articles } = await curateArticles({
-      data: { region, topic: "top", articles: [found] },
+    const { articles } = await curateArticlesImpl({
+      region,
+      topic: "top",
+      articles: [found],
     });
     return { article: articles[0] ?? found };
   });
